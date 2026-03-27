@@ -115,7 +115,6 @@ def parsear_fecha_segura(valor):
     if isinstance(valor, pd.Timestamp):
         return valor
 
-    # Serial de Excel
     if isinstance(valor, (int, float)) and not isinstance(valor, bool):
         try:
             return pd.to_datetime(valor, unit="D", origin="1899-12-30", errors="coerce")
@@ -126,7 +125,6 @@ def parsear_fecha_segura(valor):
     if not txt:
         return pd.NaT
 
-    # Primero intenta formatos año-mes-día / año/mes/día
     formatos_ymd = [
         "%Y-%m-%d",
         "%Y-%m-%d %H:%M:%S",
@@ -141,7 +139,6 @@ def parsear_fecha_segura(valor):
         except Exception:
             pass
 
-    # Luego intenta día/mes/año
     formatos_dmy = [
         "%d/%m/%Y",
         "%d/%m/%Y %H:%M:%S",
@@ -156,7 +153,6 @@ def parsear_fecha_segura(valor):
         except Exception:
             pass
 
-    # Último intento automático
     try:
         return pd.to_datetime(txt, errors="coerce")
     except Exception:
@@ -174,7 +170,6 @@ def parsear_hora_segura(valor):
             "second": valor.second
         }
 
-    # Serial Excel que representa hora
     if isinstance(valor, (int, float)) and not isinstance(valor, bool):
         try:
             hora_dt = pd.to_datetime(valor, unit="D", origin="1899-12-30", errors="coerce")
@@ -475,7 +470,7 @@ def segunda_validacion_tiempo_espera_destino(row, minutos):
 
 
 # =========================
-#  PENALIDADES
+# PENALIDADES
 # =========================
 def calcular_penalidades(row):
     motivo = row.get("motivo_traslado", "")
@@ -715,9 +710,6 @@ def procesar_archivo(df):
         df_salida["ocurrencias_destino"].fillna(0)
     ).astype(int)
 
-    # =========================
-    # APLICAR PENALIDADES
-    # =========================
     resultado_penalidad = df_salida.apply(calcular_penalidades, axis=1)
     df_salida = pd.concat([df_salida, resultado_penalidad], axis=1)
 
@@ -776,7 +768,7 @@ if archivo is not None:
         f1, f2, f3, f4 = st.columns(4)
 
         with f1:
-            estados = sorted(df_resultado["estado"].dropna().unique().tolist())
+            estados = sorted(df_resultado["estado"].dropna().unique().tolist()) if "estado" in df_resultado.columns else []
             estado_sel = st.multiselect(
                 "Estado",
                 options=estados,
@@ -785,7 +777,7 @@ if archivo is not None:
             )
 
         with f2:
-            sedes = sorted(df_resultado["sede"].dropna().unique().tolist())
+            sedes = sorted(df_resultado["sede"].dropna().unique().tolist()) if "sede" in df_resultado.columns else []
             sede_sel = st.multiselect(
                 "Sede",
                 options=sedes,
@@ -794,7 +786,7 @@ if archivo is not None:
             )
 
         with f3:
-            motivos = sorted(df_resultado["motivo_traslado"].dropna().unique().tolist())
+            motivos = sorted(df_resultado["motivo_traslado"].dropna().unique().tolist()) if "motivo_traslado" in df_resultado.columns else []
             motivo_sel = st.multiselect(
                 "Motivo",
                 options=motivos,
@@ -803,7 +795,7 @@ if archivo is not None:
             )
 
         with f4:
-            tipos = sorted(df_resultado["tipo_unidad"].dropna().unique().tolist())
+            tipos = sorted(df_resultado["tipo_unidad"].dropna().unique().tolist()) if "tipo_unidad" in df_resultado.columns else []
             tipo_sel = st.multiselect(
                 "Tipo unidad",
                 options=tipos,
@@ -918,90 +910,72 @@ if archivo is not None:
         # =========================
         # RESUMEN ORIGEN -> DESTINO
         # =========================
-
         st.subheader("Resumen de servicios por centro asistencial origen y destino")
 
-  if "c_asistencial_origen" in df_filtrado.columns and "c_asistencial_destino" in df_filtrado.columns:
+        if "c_asistencial_origen" in df_filtrado.columns and "c_asistencial_destino" in df_filtrado.columns:
+            centros_permitidos_set = {
+                normalizar_texto(nombre) for nombre in CENTROS_ASISTENCIALES_PERMITIDOS
+            }
 
-    centros_permitidos_set = {
-        normalizar_texto(nombre) for nombre in CENTROS_ASISTENCIALES_PERMITIDOS
-    }
+            RESPONSABILIDADES_VALIDAS = {"ADMISION", "PROVEEDOR", "PACIENTE"}
 
-    # =========================
-    # FILTRO RESPONSABILIDAD
-    # =========================
-    RESPONSABILIDADES_VALIDAS = {"ADMISION", "PROVEEDOR", "PACIENTE"}
+            def limpiar_responsabilidad(x):
+                if pd.isna(x):
+                    return ""
+                x_norm = normalizar_texto(x)
+                return x_norm if x_norm in RESPONSABILIDADES_VALIDAS else ""
 
-    def limpiar_responsabilidad(x):
-        if pd.isna(x):
-            return ""
-        x_norm = normalizar_texto(x)
-        return x_norm if x_norm in RESPONSABILIDADES_VALIDAS else ""
+            if "responsabilidad" in df_filtrado.columns:
+                df_ruta = df_filtrado.assign(
+                    responsabilidad_limpia=df_filtrado["responsabilidad"].apply(limpiar_responsabilidad)
+                )
+            else:
+                df_ruta = df_filtrado.copy()
+                df_ruta["responsabilidad_limpia"] = ""
 
-    # =========================
-    # AGRUPACION
-    # =========================
-    resumen_ruta = (
-        df_filtrado.assign(
-            responsabilidad_limpia=df_filtrado["responsabilidad"].apply(limpiar_responsabilidad)
-        )
-        .groupby(["c_asistencial_origen", "c_asistencial_destino"], dropna=False)
-        .agg(
-            Responsabilidad=("responsabilidad_limpia", "first"),
-            ocurrencias_total=("c_asistencial_destino", "count"),
-            tiempo_espera_destino_total=("min_espera_destino", "sum"),
-            sobrecosto_total_espera=("sobrecosto_total_espera", "sum"),
-        )
-        .reset_index()
-    )
+            resumen_ruta = (
+                df_ruta.groupby(["c_asistencial_origen", "c_asistencial_destino"], dropna=False)
+                .agg(
+                    Responsabilidad=("responsabilidad_limpia", "first"),
+                    ocurrencias_total=("c_asistencial_destino", "count"),
+                    tiempo_espera_destino_total=("min_espera_destino", "sum"),
+                    sobrecosto_total_espera=("sobrecosto_total_espera", "sum"),
+                )
+                .reset_index()
+            )
 
-    # =========================
-    # LIMPIEZA DE NULOS
-    # =========================
-    resumen_ruta["c_asistencial_origen"] = resumen_ruta["c_asistencial_origen"].fillna("SIN DATO")
-    resumen_ruta["c_asistencial_destino"] = resumen_ruta["c_asistencial_destino"].fillna("SIN DATO")
+            resumen_ruta["c_asistencial_origen"] = resumen_ruta["c_asistencial_origen"].fillna("SIN DATO")
+            resumen_ruta["c_asistencial_destino"] = resumen_ruta["c_asistencial_destino"].fillna("SIN DATO")
 
-    # =========================
-    # FILTRO DE CENTROS PERMITIDOS
-    # =========================
-    resumen_ruta["destino_normalizado"] = resumen_ruta["c_asistencial_destino"].apply(normalizar_texto)
+            resumen_ruta["destino_normalizado"] = resumen_ruta["c_asistencial_destino"].apply(normalizar_texto)
 
-    resumen_ruta = resumen_ruta[
-        resumen_ruta["destino_normalizado"].isin(centros_permitidos_set)
-    ].copy()
+            resumen_ruta = resumen_ruta[
+                resumen_ruta["destino_normalizado"].isin(centros_permitidos_set)
+            ].copy()
 
-    # =========================
-    # ORDEN DE CENTROS
-    # =========================
-    orden_centros = {
-        normalizar_texto(nombre): idx
-        for idx, nombre in enumerate(CENTROS_ASISTENCIALES_PERMITIDOS)
-    }
+            orden_centros = {
+                normalizar_texto(nombre): idx
+                for idx, nombre in enumerate(CENTROS_ASISTENCIALES_PERMITIDOS)
+            }
 
-    resumen_ruta["orden"] = resumen_ruta["destino_normalizado"].map(orden_centros)
+            resumen_ruta["orden"] = resumen_ruta["destino_normalizado"].map(orden_centros)
 
-    resumen_ruta = resumen_ruta.sort_values(
-        by=["orden", "c_asistencial_destino", "c_asistencial_origen"]
-    )
+            resumen_ruta = resumen_ruta.sort_values(
+                by=["orden", "c_asistencial_destino", "c_asistencial_origen"]
+            )
 
-    # =========================
-    # ORDEN FINAL DE COLUMNAS
-    # =========================
-    resumen_ruta = resumen_ruta[
-        [
-            "c_asistencial_origen",
-            "c_asistencial_destino",
-            "Responsabilidad",
-            "ocurrencias_total",
-            "tiempo_espera_destino_total",
-            "sobrecosto_total_espera",
-        ]
-    ]
+            resumen_ruta = resumen_ruta[
+                [
+                    "c_asistencial_origen",
+                    "c_asistencial_destino",
+                    "Responsabilidad",
+                    "ocurrencias_total",
+                    "tiempo_espera_destino_total",
+                    "sobrecosto_total_espera",
+                ]
+            ]
 
-    # =========================
-    # MOSTRAR
-    # =========================
-    st.dataframe(formatear_resumen(resumen_ruta), use_container_width=True)
+            st.dataframe(formatear_resumen(resumen_ruta), use_container_width=True)
 
         # =========================
         # DESCARGA
@@ -1013,6 +987,7 @@ if archivo is not None:
             file_name="resultado_dashboard.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
+
         st.success("Archivo procesado correctamente.")
 
     except Exception as e:
