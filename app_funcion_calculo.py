@@ -918,12 +918,10 @@ if archivo is not None:
         # =========================
         # RESUMEN ORIGEN -> DESTINO
         # =========================
-# =========================
-# RESUMEN ORIGEN -> DESTINO
-# =========================
-st.subheader("Resumen de servicios por centro asistencial origen y destino")
 
-if "c_asistencial_origen" in df_filtrado.columns and "c_asistencial_destino" in df_filtrado.columns:
+       st.subheader("Resumen de servicios por centro asistencial origen y destino")
+
+  if "c_asistencial_origen" in df_filtrado.columns and "c_asistencial_destino" in df_filtrado.columns:
 
     centros_permitidos_set = {
         normalizar_texto(nombre) for nombre in CENTROS_ASISTENCIALES_PERMITIDOS
