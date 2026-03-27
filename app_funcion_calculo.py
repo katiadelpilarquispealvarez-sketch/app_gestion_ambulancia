@@ -919,7 +919,7 @@ if archivo is not None:
         # RESUMEN ORIGEN -> DESTINO
         # =========================
 
-       st.subheader("Resumen de servicios por centro asistencial origen y destino")
+        st.subheader("Resumen de servicios por centro asistencial origen y destino")
 
   if "c_asistencial_origen" in df_filtrado.columns and "c_asistencial_destino" in df_filtrado.columns:
 
