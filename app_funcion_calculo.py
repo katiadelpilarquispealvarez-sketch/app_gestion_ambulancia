@@ -918,44 +918,92 @@ if archivo is not None:
         # =========================
         # RESUMEN ORIGEN -> DESTINO
         # =========================
-        st.subheader("Resumen de servicios por centro asistencial origen y destino")
+# =========================
+# RESUMEN ORIGEN -> DESTINO
+# =========================
+st.subheader("Resumen de servicios por centro asistencial origen y destino")
 
-        if "c_asistencial_origen" in df_filtrado.columns and "c_asistencial_destino" in df_filtrado.columns:
-            centros_permitidos_set = {
-                normalizar_texto(nombre) for nombre in CENTROS_ASISTENCIALES_PERMITIDOS
-            }
+if "c_asistencial_origen" in df_filtrado.columns and "c_asistencial_destino" in df_filtrado.columns:
 
-            resumen_ruta = (
-                df_filtrado.groupby(["c_asistencial_origen", "c_asistencial_destino"], dropna=False)
-                .agg(
-                    ocurrencias_total=("c_asistencial_destino", "count"),
-                    tiempo_espera_destino_total=("min_espera_destino", "sum"),
-                    sobrecosto_total_espera=("sobrecosto_total_espera", "sum"),
-                )
-                .reset_index()
-            )
+    centros_permitidos_set = {
+        normalizar_texto(nombre) for nombre in CENTROS_ASISTENCIALES_PERMITIDOS
+    }
 
-            resumen_ruta["c_asistencial_origen"] = resumen_ruta["c_asistencial_origen"].fillna("SIN DATO")
-            resumen_ruta["c_asistencial_destino"] = resumen_ruta["c_asistencial_destino"].fillna("SIN DATO")
+    # =========================
+    # FILTRO RESPONSABILIDAD
+    # =========================
+    RESPONSABILIDADES_VALIDAS = {"ADMISION", "PROVEEDOR", "PACIENTE"}
 
-            resumen_ruta["destino_normalizado"] = resumen_ruta["c_asistencial_destino"].apply(normalizar_texto)
+    def limpiar_responsabilidad(x):
+        if pd.isna(x):
+            return ""
+        x_norm = normalizar_texto(x)
+        return x_norm if x_norm in RESPONSABILIDADES_VALIDAS else ""
 
-            resumen_ruta = resumen_ruta[
-                resumen_ruta["destino_normalizado"].isin(centros_permitidos_set)
-            ].copy()
+    # =========================
+    # AGRUPACION
+    # =========================
+    resumen_ruta = (
+        df_filtrado.assign(
+            responsabilidad_limpia=df_filtrado["responsabilidad"].apply(limpiar_responsabilidad)
+        )
+        .groupby(["c_asistencial_origen", "c_asistencial_destino"], dropna=False)
+        .agg(
+            Responsabilidad=("responsabilidad_limpia", "first"),
+            ocurrencias_total=("c_asistencial_destino", "count"),
+            tiempo_espera_destino_total=("min_espera_destino", "sum"),
+            sobrecosto_total_espera=("sobrecosto_total_espera", "sum"),
+        )
+        .reset_index()
+    )
 
-            orden_centros = {
-                normalizar_texto(nombre): idx
-                for idx, nombre in enumerate(CENTROS_ASISTENCIALES_PERMITIDOS)
-            }
+    # =========================
+    # LIMPIEZA DE NULOS
+    # =========================
+    resumen_ruta["c_asistencial_origen"] = resumen_ruta["c_asistencial_origen"].fillna("SIN DATO")
+    resumen_ruta["c_asistencial_destino"] = resumen_ruta["c_asistencial_destino"].fillna("SIN DATO")
 
-            resumen_ruta["orden"] = resumen_ruta["destino_normalizado"].map(orden_centros)
+    # =========================
+    # FILTRO DE CENTROS PERMITIDOS
+    # =========================
+    resumen_ruta["destino_normalizado"] = resumen_ruta["c_asistencial_destino"].apply(normalizar_texto)
 
-            resumen_ruta = resumen_ruta.sort_values(
-                by=["orden", "c_asistencial_destino", "c_asistencial_origen"]
-            ).drop(columns=["destino_normalizado", "orden"])
+    resumen_ruta = resumen_ruta[
+        resumen_ruta["destino_normalizado"].isin(centros_permitidos_set)
+    ].copy()
 
-            st.dataframe(formatear_resumen(resumen_ruta), use_container_width=True)
+    # =========================
+    # ORDEN DE CENTROS
+    # =========================
+    orden_centros = {
+        normalizar_texto(nombre): idx
+        for idx, nombre in enumerate(CENTROS_ASISTENCIALES_PERMITIDOS)
+    }
+
+    resumen_ruta["orden"] = resumen_ruta["destino_normalizado"].map(orden_centros)
+
+    resumen_ruta = resumen_ruta.sort_values(
+        by=["orden", "c_asistencial_destino", "c_asistencial_origen"]
+    )
+
+    # =========================
+    # ORDEN FINAL DE COLUMNAS
+    # =========================
+    resumen_ruta = resumen_ruta[
+        [
+            "c_asistencial_origen",
+            "c_asistencial_destino",
+            "Responsabilidad",
+            "ocurrencias_total",
+            "tiempo_espera_destino_total",
+            "sobrecosto_total_espera",
+        ]
+    ]
+
+    # =========================
+    # MOSTRAR
+    # =========================
+    st.dataframe(formatear_resumen(resumen_ruta), use_container_width=True)
 
         # =========================
         # DESCARGA
